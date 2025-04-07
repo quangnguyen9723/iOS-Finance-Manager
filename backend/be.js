@@ -1,8 +1,9 @@
 // server.js - Backend for Firebase Authentication and Firestore Transactions
 const express = require('express');
 const cors = require('cors');
+const dotenv = require("dotenv")
 const { v4: uuidv4 } = require('uuid');
-const admin = require('firebase-admin');
+const {getFirestore} = require('firebase/firestore')
 const firebase = require('firebase/app');
 const { 
   getAuth: getClientAuth, 
@@ -16,10 +17,7 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: true }));
 
-// Initialize Firebase Admin SDK
-admin.initializeApp({
-  credential: admin.credential.applicationDefault(), // Uses GOOGLE_APPLICATION_CREDENTIALS env var
-});
+dotenv.config()
 
 // Initialize Firebase Client SDK for authentication
 const firebaseConfig = {
@@ -35,7 +33,7 @@ const firebaseApp = firebase.initializeApp(firebaseConfig);
 const clientAuth = getClientAuth(firebaseApp);
 
 // Get Firestore instance
-const db = admin.firestore();
+const db = getFirestore(firebaseApp);
 
 // Middleware to verify Firebase ID token
 const authenticateUser = async (req, res, next) => {
