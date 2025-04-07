@@ -65,3 +65,51 @@ pids
 
 # Debug files
 .node_repl_history
+
+# ----------iOS specific----------
+# Place this .gitignore in root/ios/ios-project
+
+# macOS files
+.DS_Store
+
+# Xcode project files
+*.xcworkspace
+!default.xcworkspace
+
+# Build artifacts and DerivedData
+build/
+DerivedData/
+*.hmap
+*.ipa
+
+# Swift Package Manager
+.build/
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# Fastlane generated files
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+
+# Xcode user-specific files
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+
+# AppCode files
+.idea/
+
+# Temporary files
+*.swp
+*.tmp
+
