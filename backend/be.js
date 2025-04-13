@@ -1,4 +1,3 @@
-// server.js - Backend for Firebase Authentication and Firestore Transactions
 const express = require('express');
 const cors = require('cors');
 const dotenv = require("dotenv")
@@ -11,11 +10,13 @@ const {
   createUserWithEmailAndPassword, 
   signOut 
 } = require('firebase/auth');
+const transactionsRouter = require('./transactions');
 
 // Initialize express app
 const app = express();
 app.use(express.json());
 app.use(cors({ origin: true }));
+app.use('/transactions', transactionsRouter);
 
 dotenv.config()
 
