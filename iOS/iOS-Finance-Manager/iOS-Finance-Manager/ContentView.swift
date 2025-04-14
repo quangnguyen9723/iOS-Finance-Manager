@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - API Service
 
 struct APIService {
-    static let baseURL = "http://localhost:8080" // Replace with your backend URL
+    static let baseURL = "https://ios-finance-manager.onrender.com"
 
     static func login(email: String, password: String) async throws -> AuthResponse {
         guard let url = URL(string: "\(baseURL)/auth/signin") else { throw URLError(.badURL) }
@@ -44,6 +44,7 @@ struct APIService {
         request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, _) = try await URLSession.shared.data(for: request)
         let decoder = JSONDecoder()
+        // Using ISO8601 date decoding (with fallback handled in Transaction)
         decoder.dateDecodingStrategy = .iso8601
         let transactions = try decoder.decode([Transaction].self, from: data)
         return transactions
@@ -67,7 +68,33 @@ struct APIService {
         return transactionID
     }
     
-    // Additional API functions for updating and deleting transactions can be added here.
+    // New: Update a transaction
+    static func updateTransaction(transaction: Transaction, token: String) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/transactions/\(transaction.id)") else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(transaction)
+        request.httpBody = data
+        let (responseData, _) = try await URLSession.shared.data(for: request)
+        let result = try JSONDecoder().decode([String: String].self, from: responseData)
+        guard let message = result["message"] else {
+            throw NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid update response"])
+        }
+        return message
+    }
+    
+    // New: Delete a transaction
+    static func deleteTransaction(transactionID: String, token: String) async throws {
+        guard let url = URL(string: "\(baseURL)/transactions/\(transactionID)") else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        _ = try await URLSession.shared.data(for: request)
+    }
 }
 
 // MARK: - Models
@@ -132,41 +159,7 @@ struct Transaction: Identifiable, Codable {
         case isExpense = "is_expense"
     }
     
-    private static func parseDate(from string: String) -> Date? {
-        // ISO8601 with or without milliseconds
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = isoFormatter.date(from: string) {
-            return date
-        }
-
-        // Try ISO8601 without fractional seconds
-        isoFormatter.formatOptions = [.withInternetDateTime]
-        if let date = isoFormatter.date(from: string) {
-            return date
-        }
-
-        // Fallback: "yyyy-MM-dd HH:mm:ss"
-        let fallbackFormats = [
-            "yyyy-MM-dd HH:mm:ss",
-            "yyyy-MM-dd'T'HH:mm:ss",
-            "yyyy-MM-dd"
-        ]
-
-        for format in fallbackFormats {
-            let formatter = DateFormatter()
-            formatter.dateFormat = format
-            formatter.timeZone = TimeZone(secondsFromGMT: 0)
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            if let date = formatter.date(from: string) {
-                return date
-            }
-        }
-
-        return nil
-    }
-    
-    // Explicit initializer for creating new transactions in the frontend.
+    // Explicit initializer for creating new transactions.
     init(id: String = UUID().uuidString, title: String, amount: Double, date: Date, category: Category, isExpense: Bool) {
         self.id = id
         self.title = title
@@ -176,13 +169,11 @@ struct Transaction: Identifiable, Codable {
         self.isExpense = isExpense
     }
     
-    // Custom decoding
+    // Custom decoding: handles numbers as Double or String and flexibly parses dates.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
-
-        // Handle amount that might be a String or Double
         if let doubleAmount = try? container.decode(Double.self, forKey: .amount) {
             amount = doubleAmount
         } else {
@@ -192,21 +183,16 @@ struct Transaction: Identifiable, Codable {
             }
             amount = convertedAmount
         }
-
-        // Flexible date decoding with logging
         let rawDateString = try container.decode(String.self, forKey: .date)
-        let parsedDate = Transaction.parseDate(from: rawDateString)
-        guard let date = parsedDate else {
-            print("❌ Failed to parse date string:", rawDateString)
+        guard let parsedDate = Transaction.parseDate(from: rawDateString) else {
             throw DecodingError.dataCorruptedError(forKey: .date, in: container, debugDescription: "Expected date string to be ISO8601-formatted or compatible.")
         }
-        self.date = date
-
+        date = parsedDate
         category = try container.decode(Category.self, forKey: .category)
         isExpense = try container.decode(Bool.self, forKey: .isExpense)
     }
     
-    // Custom encoding to output the amount as a numeric value.
+    // Custom encoding.
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -215,6 +201,30 @@ struct Transaction: Identifiable, Codable {
         try container.encode(date, forKey: .date)
         try container.encode(category, forKey: .category)
         try container.encode(isExpense, forKey: .isExpense)
+    }
+    
+    // Helper method for robust date parsing.
+    private static func parseDate(from string: String) -> Date? {
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = isoFormatter.date(from: string) { return date }
+        
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        if let date = isoFormatter.date(from: string) { return date }
+        
+        let fallbackFormats = [
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd"
+        ]
+        for format in fallbackFormats {
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            if let date = formatter.date(from: string) { return date }
+        }
+        return nil
     }
 }
 
@@ -277,7 +287,7 @@ class AuthViewModel: ObservableObject {
 class FinanceManager: ObservableObject {
     @Published var transactions: [Transaction] = []
     
-    // Compute the current balance based on the transactions array.
+    // Compute the current balance.
     var balance: Double {
         transactions.reduce(0) { $0 + ($1.isExpense ? -$1.amount : $1.amount) }
     }
@@ -286,7 +296,6 @@ class FinanceManager: ObservableObject {
         do {
             let fetched = try await APIService.fetchTransactions(token: token)
             self.transactions = fetched.sorted(by: { $0.date > $1.date })
-            print("transactions fetched: \(fetched)")
         } catch {
             print("Error fetching transactions: \(error)")
         }
@@ -303,13 +312,32 @@ class FinanceManager: ObservableObject {
         }
     }
     
-    // Additional methods for updating or deleting transactions can be added here.
+    // New: Update a transaction.
+    func updateTransaction(_ transaction: Transaction, token: String) async {
+        do {
+            _ = try await APIService.updateTransaction(transaction: transaction, token: token)
+            if let index = self.transactions.firstIndex(where: { $0.id == transaction.id }) {
+                self.transactions[index] = transaction
+            }
+        } catch {
+            print("Error updating transaction: \(error)")
+        }
+    }
+    
+    // New: Delete a transaction.
+    func deleteTransaction(_ transaction: Transaction, token: String) async {
+        do {
+            try await APIService.deleteTransaction(transactionID: transaction.id, token: token)
+            self.transactions.removeAll { $0.id == transaction.id }
+        } catch {
+            print("Error deleting transaction: \(error)")
+        }
+    }
 }
 
 // MARK: - Views
 
-/// The root view switches between AuthenticationView and MainTabView.
-/// An onChange modifier listens for changes in the auth token to fetch transactions.
+/// The root view which switches between authentication and the main tab view.
 struct ContentView: View {
     @StateObject var authVM = AuthViewModel()
     @StateObject var financeManager = FinanceManager()
@@ -399,22 +427,16 @@ struct MainTabView: View {
     var body: some View {
         TabView {
             DashboardView()
-                .tabItem {
-                    Label("Dashboard", systemImage: "house.fill")
-                }
+                .tabItem { Label("Dashboard", systemImage: "house.fill") }
             TransactionsView()
-                .tabItem {
-                    Label("Transactions", systemImage: "list.bullet")
-                }
+                .tabItem { Label("Transactions", systemImage: "list.bullet") }
             SettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gear")
-                }
+                .tabItem { Label("Settings", systemImage: "gear") }
         }
     }
 }
 
-/// The dashboard view shows the current balance and recent transactions.
+/// The dashboard view showing the current balance and recent transactions.
 struct DashboardView: View {
     @EnvironmentObject var financeManager: FinanceManager
     @EnvironmentObject var authVM: AuthViewModel
@@ -494,7 +516,9 @@ struct DashboardView: View {
                                 .frame(maxWidth: .infinity, alignment: .center)
                         } else {
                             ForEach(financeManager.transactions.prefix(5)) { transaction in
-                                TransactionRowView(transaction: transaction)
+                                NavigationLink(destination: EditTransactionView(transaction: transaction)) {
+                                    TransactionRowView(transaction: transaction)
+                                }
                             }
                         }
                     }
@@ -566,7 +590,7 @@ struct TransactionRowView: View {
     }
 }
 
-/// A view for listing, filtering, and searching transactions.
+/// The transactions view shows the full list with search, filtering, update, and swipe-to-delete.
 struct TransactionsView: View {
     @EnvironmentObject var financeManager: FinanceManager
     @EnvironmentObject var authVM: AuthViewModel
@@ -673,9 +697,11 @@ struct TransactionsView: View {
                 } else {
                     List {
                         ForEach(filteredTransactions) { transaction in
-                            TransactionRowView(transaction: transaction)
+                            NavigationLink(destination: EditTransactionView(transaction: transaction)) {
+                                TransactionRowView(transaction: transaction)
+                            }
                         }
-                        // On deletion, you could add async API calls to remove the transaction on the backend.
+                        .onDelete(perform: deleteTransaction)
                     }
                 }
             }
@@ -691,6 +717,16 @@ struct TransactionsView: View {
                 AddTransactionView(isExpense: true)
                     .environmentObject(authVM)
                     .environmentObject(financeManager)
+            }
+        }
+    }
+    
+    private func deleteTransaction(at offsets: IndexSet) {
+        guard let token = authVM.token else { return }
+        let transactionsToDelete = offsets.map { filteredTransactions[$0] }
+        for transaction in transactionsToDelete {
+            Task {
+                await financeManager.deleteTransaction(transaction, token: token)
             }
         }
     }
@@ -802,6 +838,94 @@ struct AddTransactionView: View {
             isExpense: isExpense
         )
         await financeManager.addTransaction(transaction, token: token)
+        presentationMode.wrappedValue.dismiss()
+    }
+}
+
+/// A new view for updating an existing transaction.
+struct EditTransactionView: View {
+    @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var financeManager: FinanceManager
+    
+    @State var transaction: Transaction
+    @State private var title: String
+    @State private var amount: String
+    @State private var date: Date
+    @State private var selectedCategory: Category
+    @State private var isExpense: Bool
+    
+    init(transaction: Transaction) {
+        self._transaction = State(initialValue: transaction)
+        // Prepopulate fields from the passed transaction.
+        self._title = State(initialValue: transaction.title)
+        self._amount = State(initialValue: String(format: "%.2f", transaction.amount))
+        self._date = State(initialValue: transaction.date)
+        self._selectedCategory = State(initialValue: transaction.category)
+        self._isExpense = State(initialValue: transaction.isExpense)
+    }
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Transaction Details")) {
+                    TextField("Title", text: $title)
+                    TextField("Amount", text: $amount)
+                        .keyboardType(.decimalPad)
+                    DatePicker("Date", selection: $date, displayedComponents: .date)
+                    Picker("Type", selection: $isExpense) {
+                        Text("Income").tag(false)
+                        Text("Expense").tag(true)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .onChange(of: isExpense) { newValue in
+                        if !newValue {
+                            selectedCategory = .income
+                        } else if selectedCategory == .income {
+                            selectedCategory = .other
+                        }
+                    }
+                    if isExpense {
+                        Picker("Category", selection: $selectedCategory) {
+                            ForEach(Category.allCases.filter { $0 != .income }, id: \.self) { category in
+                                HStack {
+                                    Image(systemName: category.icon)
+                                        .foregroundColor(category.color)
+                                    Text(category.rawValue)
+                                }
+                                .tag(category)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Edit Transaction")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { presentationMode.wrappedValue.dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        Task { await saveEdits() }
+                    }
+                    .disabled(title.isEmpty || amount.isEmpty)
+                }
+            }
+        }
+    }
+    
+    private func saveEdits() async {
+        guard let amountValue = Double(amount),
+              let token = authVM.token else { return }
+        let updatedTransaction = Transaction(
+            id: transaction.id,
+            title: title,
+            amount: amountValue,
+            date: date,
+            category: isExpense ? selectedCategory : .income,
+            isExpense: isExpense
+        )
+        await financeManager.updateTransaction(updatedTransaction, token: token)
         presentationMode.wrappedValue.dismiss()
     }
 }
