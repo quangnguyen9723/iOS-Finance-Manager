@@ -133,6 +133,34 @@ struct Transaction: Identifiable, Codable {
     }
 }
 
+struct TransactionSummary: Codable {
+    let totalExpenses: Double
+    let totalIncome: Double
+    
+    enum CodingKeys: String, CodingKey {
+        case totalExpenses = "total_expenses"
+        case totalIncome = "total_income"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let expensesString = try container.decode(String.self, forKey: .totalExpenses)
+        let incomeString = try container.decode(String.self, forKey: .totalIncome)
+        guard let expenses = Double(expensesString),
+              let income = Double(incomeString) else {
+            throw DecodingError.dataCorruptedError(forKey: .totalExpenses, in: container, debugDescription: "Invalid summary values")
+        }
+        totalExpenses = expenses
+        totalIncome = income
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode("\(totalExpenses)", forKey: .totalExpenses)
+        try container.encode("\(totalIncome)", forKey: .totalIncome)
+    }
+}
+
 struct AuthResponse: Codable {
     let uid: String
     let email: String

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import WidgetKit
 import SwiftUI
 
 @MainActor
@@ -64,6 +65,8 @@ class FinanceManager: ObservableObject {
         do {
             let fetched = try await APIService.fetchTransactions(token: token)
             self.transactions = fetched.sorted(by: { $0.date > $1.date })
+            
+            try await updateWidgetData(token: token)
         } catch {
             print("Error fetching transactions: \(error)")
         }
@@ -76,6 +79,8 @@ class FinanceManager: ObservableObject {
             var newTransaction = transaction
             newTransaction.id = newID
             self.transactions.insert(newTransaction, at: 0)
+            
+            try await updateWidgetData(token: token)
         } catch {
             print("Error adding transaction: \(error)")
         }
@@ -87,6 +92,8 @@ class FinanceManager: ObservableObject {
             if let index = self.transactions.firstIndex(where: { $0.id == transaction.id }) {
                 self.transactions[index] = transaction
             }
+            
+            try await updateWidgetData(token: token)
         } catch {
             print("Error updating transaction: \(error)")
         }
@@ -96,8 +103,20 @@ class FinanceManager: ObservableObject {
         do {
             try await APIService.deleteTransaction(transactionID: transaction.id, token: token)
             self.transactions.removeAll { $0.id == transaction.id }
+            
+            try await updateWidgetData(token: token)
         } catch {
             print("Error deleting transaction: \(error)")
         }
+    }
+    
+    func updateWidgetData(token: String) async throws {
+        let summary = try await APIService.fetchTransactionSummary(token: token)
+        if let defaults = UserDefaults(suiteName: "group.finance.manager") {
+            defaults.set(self.balance, forKey: "currentBalance")
+            defaults.set(summary.totalIncome, forKey: "totalIncome")
+            defaults.set(summary.totalExpenses, forKey: "totalExpenses")
+        }
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }
