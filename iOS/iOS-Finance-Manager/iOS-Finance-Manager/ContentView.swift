@@ -1,9 +1,74 @@
-//
-//
-//  Created by Quang Nguyen on 3/4/25.
-//
-
 import SwiftUI
+
+// MARK: - API Service
+
+struct APIService {
+    static let baseURL = "http://localhost:8080" // Replace with your backend URL
+
+    static func login(email: String, password: String) async throws -> AuthResponse {
+        guard let url = URL(string: "\(baseURL)/auth/signin") else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = ["email": email, "password": password]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+        return authResponse
+    }
+    
+    static func signup(email: String, password: String) async throws -> AuthResponse {
+        guard let url = URL(string: "\(baseURL)/auth/signup") else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = ["email": email, "password": password]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+        return authResponse
+    }
+    
+    static func signout(token: String) async throws {
+        guard let url = URL(string: "\(baseURL)/auth/signout") else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        _ = try await URLSession.shared.data(for: request)
+    }
+    
+    static func fetchTransactions(token: String) async throws -> [Transaction] {
+        guard let url = URL(string: "\(baseURL)/transactions") else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let transactions = try decoder.decode([Transaction].self, from: data)
+        return transactions
+    }
+    
+    static func addTransaction(transaction: Transaction, token: String) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/transactions") else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(transaction)
+        request.httpBody = data
+        let (responseData, _) = try await URLSession.shared.data(for: request)
+        let result = try JSONDecoder().decode([String: String].self, from: responseData)
+        guard let transactionID = result["transaction_id"] else {
+            throw NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])
+        }
+        return transactionID
+    }
+    
+    // Additional API functions for updating and deleting transactions can be added here.
+}
 
 // MARK: - Models
 
@@ -48,7 +113,7 @@ enum Category: String, CaseIterable, Codable {
 }
 
 struct Transaction: Identifiable, Codable {
-    var id = UUID()
+    var id: String
     var title: String
     var amount: Double
     var date: Date
@@ -61,88 +126,287 @@ struct Transaction: Identifiable, Codable {
         formatter.currencySymbol = "$"
         return formatter.string(from: NSNumber(value: amount)) ?? "$0.00"
     }
-}
-
-// MARK: - View Model
-
-class FinanceManager: ObservableObject {
-    @Published var transactions: [Transaction] = []
-    @Published var balance: Double = 0.0
     
-    private let transactionsKey = "savedTransactions"
-    private let balanceKey = "savedBalance"
-    
-    init() {
-        loadData()
+    enum CodingKeys: String, CodingKey {
+        case id, title, amount, date, category
+        case isExpense = "is_expense"
     }
     
-    func addTransaction(_ transaction: Transaction) {
-        transactions.append(transaction)
-        if transaction.isExpense {
-            balance -= transaction.amount
-        } else {
-            balance += transaction.amount
+    private static func parseDate(from string: String) -> Date? {
+        // ISO8601 with or without milliseconds
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = isoFormatter.date(from: string) {
+            return date
         }
-        saveData()
-    }
-    
-    func removeTransaction(at indexSet: IndexSet) {
-        for index in indexSet {
-            let transaction = transactions[index]
-            if transaction.isExpense {
-                balance += transaction.amount
-            } else {
-                balance -= transaction.amount
+
+        // Try ISO8601 without fractional seconds
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        if let date = isoFormatter.date(from: string) {
+            return date
+        }
+
+        // Fallback: "yyyy-MM-dd HH:mm:ss"
+        let fallbackFormats = [
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd"
+        ]
+
+        for format in fallbackFormats {
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            if let date = formatter.date(from: string) {
+                return date
             }
         }
-        transactions.remove(atOffsets: indexSet)
-        saveData()
+
+        return nil
     }
     
-    func updateBalance(newBalance: Double) {
-        balance = newBalance
-        saveData()
+    // Explicit initializer for creating new transactions in the frontend.
+    init(id: String = UUID().uuidString, title: String, amount: Double, date: Date, category: Category, isExpense: Bool) {
+        self.id = id
+        self.title = title
+        self.amount = amount
+        self.date = date
+        self.category = category
+        self.isExpense = isExpense
     }
     
-    func saveData() {
-        if let encoded = try? JSONEncoder().encode(transactions) {
-            UserDefaults.standard.set(encoded, forKey: transactionsKey)
+    // Custom decoding
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+
+        // Handle amount that might be a String or Double
+        if let doubleAmount = try? container.decode(Double.self, forKey: .amount) {
+            amount = doubleAmount
+        } else {
+            let stringAmount = try container.decode(String.self, forKey: .amount)
+            guard let convertedAmount = Double(stringAmount) else {
+                throw DecodingError.dataCorruptedError(forKey: .amount, in: container, debugDescription: "Amount cannot be converted to Double")
+            }
+            amount = convertedAmount
         }
-        UserDefaults.standard.set(balance, forKey: balanceKey)
-    }
-    
-    func loadData() {
-        if let transactionsData = UserDefaults.standard.data(forKey: transactionsKey),
-           let decodedTransactions = try? JSONDecoder().decode([Transaction].self, from: transactionsData) {
-            transactions = decodedTransactions
+
+        // Flexible date decoding with logging
+        let rawDateString = try container.decode(String.self, forKey: .date)
+        let parsedDate = Transaction.parseDate(from: rawDateString)
+        guard let date = parsedDate else {
+            print("❌ Failed to parse date string:", rawDateString)
+            throw DecodingError.dataCorruptedError(forKey: .date, in: container, debugDescription: "Expected date string to be ISO8601-formatted or compatible.")
         }
-        balance = UserDefaults.standard.double(forKey: balanceKey)
+        self.date = date
+
+        category = try container.decode(Category.self, forKey: .category)
+        isExpense = try container.decode(Bool.self, forKey: .isExpense)
     }
     
-    func recentTransactions(limit: Int = 5) -> [Transaction] {
-        return Array(transactions.sorted(by: { $0.date > $1.date }).prefix(limit))
+    // Custom encoding to output the amount as a numeric value.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(amount, forKey: .amount)
+        try container.encode(date, forKey: .date)
+        try container.encode(category, forKey: .category)
+        try container.encode(isExpense, forKey: .isExpense)
     }
+}
+
+struct AuthResponse: Codable {
+    let uid: String
+    let email: String
+    let token: String
+}
+
+struct User {
+    let uid: String
+    let email: String
+}
+
+// MARK: - View Models
+
+@MainActor
+class AuthViewModel: ObservableObject {
+    @Published var isLoggedIn: Bool = false
+    @Published var token: String? = nil
+    @Published var user: User? = nil
+    @Published var errorMessage: String? = nil
+    
+    func login(email: String, password: String) async {
+        do {
+            let response = try await APIService.login(email: email, password: password)
+            self.token = response.token
+            self.user = User(uid: response.uid, email: response.email)
+            self.isLoggedIn = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+    
+    func signup(email: String, password: String) async {
+        do {
+            let response = try await APIService.signup(email: email, password: password)
+            self.token = response.token
+            self.user = User(uid: response.uid, email: response.email)
+            self.isLoggedIn = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+    
+    func signout() async {
+        guard let token = token else { return }
+        do {
+            try await APIService.signout(token: token)
+            self.token = nil
+            self.user = nil
+            self.isLoggedIn = false
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+@MainActor
+class FinanceManager: ObservableObject {
+    @Published var transactions: [Transaction] = []
+    
+    // Compute the current balance based on the transactions array.
+    var balance: Double {
+        transactions.reduce(0) { $0 + ($1.isExpense ? -$1.amount : $1.amount) }
+    }
+    
+    func fetchTransactions(token: String) async {
+        do {
+            let fetched = try await APIService.fetchTransactions(token: token)
+            self.transactions = fetched.sorted(by: { $0.date > $1.date })
+            print("transactions fetched: \(fetched)")
+        } catch {
+            print("Error fetching transactions: \(error)")
+        }
+    }
+    
+    func addTransaction(_ transaction: Transaction, token: String) async {
+        do {
+            let newID = try await APIService.addTransaction(transaction: transaction, token: token)
+            var newTransaction = transaction
+            newTransaction.id = newID
+            self.transactions.insert(newTransaction, at: 0)
+        } catch {
+            print("Error adding transaction: \(error)")
+        }
+    }
+    
+    // Additional methods for updating or deleting transactions can be added here.
 }
 
 // MARK: - Views
 
+/// The root view switches between AuthenticationView and MainTabView.
+/// An onChange modifier listens for changes in the auth token to fetch transactions.
 struct ContentView: View {
-    @StateObject private var financeManager = FinanceManager()
+    @StateObject var authVM = AuthViewModel()
+    @StateObject var financeManager = FinanceManager()
     
+    var body: some View {
+        Group {
+            if authVM.isLoggedIn {
+                MainTabView()
+                    .environmentObject(authVM)
+                    .environmentObject(financeManager)
+            } else {
+                AuthenticationView()
+                    .environmentObject(authVM)
+            }
+        }
+        .onChange(of: authVM.token) { token in
+            if let token = token {
+                Task { await financeManager.fetchTransactions(token: token) }
+            }
+        }
+    }
+}
+
+/// A view for signing in or signing up.
+struct AuthenticationView: View {
+    @EnvironmentObject var authVM: AuthViewModel
+    @State private var email: String = ""
+    @State private var password: String = ""
+    @State private var isSignUp: Bool = false
+    @State private var isLoading: Bool = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text(isSignUp ? "Sign Up" : "Sign In")
+                    .font(.largeTitle)
+                    .bold()
+                TextField("Email", text: $email)
+                    .keyboardType(.emailAddress)
+                    .autocapitalization(.none)
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .cornerRadius(8)
+                SecureField("Password", text: $password)
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .cornerRadius(8)
+                if let errorMessage = authVM.errorMessage {
+                    Text(errorMessage)
+                        .foregroundColor(.red)
+                }
+                Button(action: {
+                    Task {
+                        isLoading = true
+                        if isSignUp {
+                            await authVM.signup(email: email, password: password)
+                        } else {
+                            await authVM.login(email: email, password: password)
+                        }
+                        isLoading = false
+                    }
+                }) {
+                    if isLoading {
+                        ProgressView()
+                    } else {
+                        Text(isSignUp ? "Sign Up" : "Sign In")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                    }
+                }
+                Button(action: { isSignUp.toggle() }) {
+                    Text(isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+            }
+            .padding()
+        }
+    }
+}
+
+/// The main tab view after signing in.
+struct MainTabView: View {
     var body: some View {
         TabView {
             DashboardView()
-                .environmentObject(financeManager)
                 .tabItem {
                     Label("Dashboard", systemImage: "house.fill")
                 }
             TransactionsView()
-                .environmentObject(financeManager)
                 .tabItem {
                     Label("Transactions", systemImage: "list.bullet")
                 }
             SettingsView()
-                .environmentObject(financeManager)
                 .tabItem {
                     Label("Settings", systemImage: "gear")
                 }
@@ -150,26 +414,28 @@ struct ContentView: View {
     }
 }
 
+/// The dashboard view shows the current balance and recent transactions.
 struct DashboardView: View {
     @EnvironmentObject var financeManager: FinanceManager
-    @State private var showingUpdateBalanceSheet = false
+    @EnvironmentObject var authVM: AuthViewModel
     @State private var showingAddTransactionSheet = false
-    @State private var isExpenseForNewTransaction = true  // New state variable
     
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
-                    // Balance Card
-                    VStack(alignment: .leading) {
+                    // Balance card.
+                    VStack(alignment: .leading, spacing: 8) {
                         Text("Current Balance")
                             .font(.headline)
                             .foregroundColor(.secondary)
                         Text(formattedBalance)
                             .font(.system(size: 34, weight: .bold))
                             .foregroundColor(financeManager.balance >= 0 ? .primary : .red)
-                        Button("Update Balance") {
-                            showingUpdateBalanceSheet = true
+                        Button("Refresh") {
+                            if let token = authVM.token {
+                                Task { await financeManager.fetchTransactions(token: token) }
+                            }
                         }
                         .padding(.top, 8)
                     }
@@ -177,14 +443,11 @@ struct DashboardView: View {
                     .padding()
                     .background(Color(.systemBackground))
                     .cornerRadius(12)
-                    .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+                    .shadow(radius: 5)
                     
-                    // Quick Action Buttons
+                    // Quick action buttons.
                     HStack {
-                        Button(action: {
-                            isExpenseForNewTransaction = false
-                            showingAddTransactionSheet = true
-                        }) {
+                        Button(action: { showingAddTransactionSheet = true }) {
                             VStack {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.title)
@@ -197,10 +460,7 @@ struct DashboardView: View {
                             .background(Color(.systemBackground))
                             .cornerRadius(12)
                         }
-                        Button(action: {
-                            isExpenseForNewTransaction = true
-                            showingAddTransactionSheet = true
-                        }) {
+                        Button(action: { showingAddTransactionSheet = true }) {
                             VStack {
                                 Image(systemName: "minus.circle.fill")
                                     .font(.title)
@@ -214,17 +474,16 @@ struct DashboardView: View {
                             .cornerRadius(12)
                         }
                     }
-                    .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+                    .shadow(radius: 5)
                     
-                    // Recent Transactions
-                    VStack(alignment: .leading, spacing: 10) {
+                    // Recent transactions.
+                    VStack(alignment: .leading) {
                         HStack {
                             Text("Recent Transactions")
                                 .font(.headline)
                             Spacer()
                             NavigationLink(destination: TransactionsView()) {
                                 Text("See All")
-                                    .font(.subheadline)
                                     .foregroundColor(.blue)
                             }
                         }
@@ -234,7 +493,7 @@ struct DashboardView: View {
                                 .padding()
                                 .frame(maxWidth: .infinity, alignment: .center)
                         } else {
-                            ForEach(financeManager.recentTransactions()) { transaction in
+                            ForEach(financeManager.transactions.prefix(5)) { transaction in
                                 TransactionRowView(transaction: transaction)
                             }
                         }
@@ -242,16 +501,15 @@ struct DashboardView: View {
                     .padding()
                     .background(Color(.systemBackground))
                     .cornerRadius(12)
-                    .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+                    .shadow(radius: 5)
                 }
                 .padding()
             }
             .navigationTitle("Dashboard")
-            .sheet(isPresented: $showingUpdateBalanceSheet) {
-                UpdateBalanceView()
-            }
             .sheet(isPresented: $showingAddTransactionSheet) {
-                AddTransactionView(isExpense: isExpenseForNewTransaction)
+                AddTransactionView(isExpense: true)
+                    .environmentObject(authVM)
+                    .environmentObject(financeManager)
             }
         }
     }
@@ -264,6 +522,7 @@ struct DashboardView: View {
     }
 }
 
+/// A row view for displaying a transaction.
 struct TransactionRowView: View {
     let transaction: Transaction
     
@@ -275,11 +534,11 @@ struct TransactionRowView: View {
                 .frame(width: 36, height: 36)
                 .background(transaction.category.color.opacity(0.1))
                 .cornerRadius(8)
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(transaction.title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                HStack {
+                HStack(spacing: 4) {
                     Text(transaction.category.rawValue)
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -303,53 +562,14 @@ struct TransactionRowView: View {
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
-        formatter.timeStyle = .none
         return formatter
     }
 }
 
-struct UpdateBalanceView: View {
-    @Environment(\.presentationMode) var presentationMode
-    @EnvironmentObject var financeManager: FinanceManager
-    @State private var balanceText = ""
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Update Account Balance")) {
-                    TextField("Balance", text: $balanceText)
-                        .keyboardType(.decimalPad)
-                        .onAppear {
-                            balanceText = String(format: "%.2f", financeManager.balance)
-                        }
-                    Text("This will set your account balance to the amount above.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .navigationTitle("Update Balance")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        if let newBalance = Double(balanceText) {
-                            financeManager.updateBalance(newBalance: newBalance)
-                        }
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                    .disabled(balanceText.isEmpty)
-                }
-            }
-        }
-    }
-}
-
+/// A view for listing, filtering, and searching transactions.
 struct TransactionsView: View {
     @EnvironmentObject var financeManager: FinanceManager
+    @EnvironmentObject var authVM: AuthViewModel
     @State private var showingAddTransactionSheet = false
     @State private var selectedFilter: TransactionFilter = .all
     @State private var searchText = ""
@@ -394,16 +614,14 @@ struct TransactionsView: View {
         if searchText.isEmpty {
             return filtered
         } else {
-            return filtered.filter {
-                $0.title.lowercased().contains(searchText.lowercased())
-            }
+            return filtered.filter { $0.title.lowercased().contains(searchText.lowercased()) }
         }
     }
     
     var body: some View {
         NavigationView {
             VStack {
-                // Search Bar
+                // Search bar.
                 HStack {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.secondary)
@@ -421,7 +639,7 @@ struct TransactionsView: View {
                 .cornerRadius(10)
                 .padding(.horizontal)
                 
-                // Category Filter
+                // Filter chips.
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         FilterChip(title: "All", isSelected: selectedFilter == .all, action: { selectedFilter = .all })
@@ -457,7 +675,7 @@ struct TransactionsView: View {
                         ForEach(filteredTransactions) { transaction in
                             TransactionRowView(transaction: transaction)
                         }
-                        .onDelete(perform: financeManager.removeTransaction)
+                        // On deletion, you could add async API calls to remove the transaction on the backend.
                     }
                 }
             }
@@ -470,13 +688,15 @@ struct TransactionsView: View {
                 }
             }
             .sheet(isPresented: $showingAddTransactionSheet) {
-                // Default to Expense in TransactionsView
                 AddTransactionView(isExpense: true)
+                    .environmentObject(authVM)
+                    .environmentObject(financeManager)
             }
         }
     }
 }
 
+/// A simple chip view for filtering.
 struct FilterChip: View {
     let title: String
     var icon: String? = nil
@@ -505,8 +725,10 @@ struct FilterChip: View {
     }
 }
 
+/// A view for adding a new transaction.
 struct AddTransactionView: View {
     @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var financeManager: FinanceManager
     
     @State private var title = ""
@@ -528,8 +750,6 @@ struct AddTransactionView: View {
                     TextField("Amount", text: $amount)
                         .keyboardType(.decimalPad)
                     DatePicker("Date", selection: $date, displayedComponents: .date)
-                    
-                    // Reversed order: Income first, then Expense
                     Picker("Type", selection: $isExpense) {
                         Text("Income").tag(false)
                         Text("Expense").tag(true)
@@ -542,7 +762,6 @@ struct AddTransactionView: View {
                             selectedCategory = .other
                         }
                     }
-                    
                     if isExpense {
                         Picker("Category", selection: $selectedCategory) {
                             ForEach(Category.allCases.filter { $0 != .income }, id: \.self) { category in
@@ -560,13 +779,11 @@ struct AddTransactionView: View {
             .navigationTitle("Add Transaction")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
+                    Button("Cancel") { presentationMode.wrappedValue.dismiss() }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
-                        saveTransaction()
+                        Task { await saveTransaction() }
                     }
                     .disabled(title.isEmpty || amount.isEmpty)
                 }
@@ -574,78 +791,57 @@ struct AddTransactionView: View {
         }
     }
     
-    private func saveTransaction() {
-        guard let amountValue = Double(amount) else { return }
-        let category = isExpense ? selectedCategory : Category.income
+    private func saveTransaction() async {
+        guard let amountValue = Double(amount),
+              let token = authVM.token else { return }
         let transaction = Transaction(
             title: title,
             amount: amountValue,
             date: date,
-            category: category,
+            category: isExpense ? selectedCategory : .income,
             isExpense: isExpense
         )
-        financeManager.addTransaction(transaction)
+        await financeManager.addTransaction(transaction, token: token)
         presentationMode.wrappedValue.dismiss()
     }
 }
 
+/// The settings view includes a sign-out button.
 struct SettingsView: View {
+    @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var financeManager: FinanceManager
-    @State private var showingResetConfirmation = false
     @State private var showingCategoryAnalysis = false
     
     var body: some View {
         NavigationView {
             Form {
                 Section {
-                    Button("Category Analysis") {
-                        showingCategoryAnalysis = true
-                    }
+                    Button("Category Analysis") { showingCategoryAnalysis = true }
                 }
-                Section(header: Text("Data")) {
-                    Button("Reset All Data") {
-                        showingResetConfirmation = true
+                Section(header: Text("Account")) {
+                    Button("Sign Out") {
+                        Task { await authVM.signout() }
                     }
                     .foregroundColor(.red)
                 }
-                Section(header: Text("About")) {
-                    HStack {
-                        Text("Version")
-                        Spacer()
-                        Text("1.0.0")
-                            .foregroundColor(.secondary)
-                    }
-                }
             }
             .navigationTitle("Settings")
-            .alert(isPresented: $showingResetConfirmation) {
-                Alert(
-                    title: Text("Reset All Data"),
-                    message: Text("Are you sure you want to reset all data? This cannot be undone."),
-                    primaryButton: .destructive(Text("Reset")) {
-                        financeManager.transactions = []
-                        financeManager.balance = 0
-                        financeManager.saveData()
-                    },
-                    secondaryButton: .cancel()
-                )
-            }
             .sheet(isPresented: $showingCategoryAnalysis) {
                 CategoryAnalysisView()
+                    .environmentObject(financeManager)
             }
         }
     }
 }
 
+/// A view showing category spending analysis.
 struct CategoryAnalysisView: View {
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var financeManager: FinanceManager
     
     var categoryTotals: [(category: Category, amount: Double)] {
         var totals: [Category: Double] = [:]
-        for category in Category.allCases {
-            totals[category] = 0
-        }
+        for category in Category.allCases { totals[category] = 0 }
         for transaction in financeManager.transactions where transaction.isExpense {
             totals[transaction.category, default: 0] += transaction.amount
         }
@@ -687,15 +883,14 @@ struct CategoryAnalysisView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
+                    Button("Done") { presentationMode.wrappedValue.dismiss() }
                 }
             }
         }
     }
 }
 
+/// A view showing a progress bar for a given category.
 struct CategoryProgressView: View {
     let category: Category
     let amount: Double
@@ -715,7 +910,7 @@ struct CategoryProgressView: View {
             }
             HStack(spacing: 16) {
                 ProgressView(value: percentage)
-                    .progressViewStyle(LinearProgressViewStyle(tint: category.color))
+                    .progressViewStyle(LinearProgressViewStyle())
                     .frame(height: 8)
                 Text(String(format: "%.1f%%", percentage * 100))
                     .font(.caption)
@@ -734,6 +929,8 @@ struct CategoryProgressView: View {
     }
 }
 
+// MARK: - App Entry Point
+
 @main
 struct SimpleBudgetApp: App {
     var body: some Scene {
@@ -741,8 +938,4 @@ struct SimpleBudgetApp: App {
             ContentView()
         }
     }
-}
-
-#Preview {
-    ContentView()
 }
