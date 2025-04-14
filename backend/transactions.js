@@ -97,7 +97,7 @@ router.put('/:id', authenticateUser, async (req, res) => {
 );
 
 // Delete a transaction
-router.delete('/delete/:id', authenticateUser, async (req, res) => {
+router.delete('/:id', authenticateUser, async (req, res) => {
     const user_id = req.user.uid;
     const transaction_id = req.params.id;
 
@@ -107,7 +107,7 @@ router.delete('/delete/:id', authenticateUser, async (req, res) => {
             WHERE id = $1 AND user_id = $2
         `, [transaction_id, user_id]);
 
-        if (result.rowCount === 0) {
+        if (rowCount === 0) {
             return res.status(404).json({ error: 'Transaction not found' });
         }
 
