@@ -99,4 +99,8 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
+app.get('/test', (req, res) => {
+  res.status(200).json({ message: 'Hello, world!' });
+});
+
 module.exports = app; // For testing purposes
