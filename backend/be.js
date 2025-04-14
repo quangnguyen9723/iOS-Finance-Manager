@@ -116,65 +116,6 @@ app.post('/auth/signout', async (req, res) => {
   }
 });
 
-// Transaction routes
-// Add a new transaction
-app.post('/transactions', authenticateUser, async (req, res) => {
-  const { 'transaction-type': transactionType, category, date, amount } = req.body;
-  const userId = req.user.uid;
-  
-  // Validate required fields
-  if (!transactionType || !category || !date || amount === undefined) {
-    return res.status(400).json({ error: 'All fields are required: transaction-type, category, date, amount' });
-  }
-  
-  try {
-    // Create transaction object
-    const transactionId = uuidv4();
-    const transaction = {
-      'transaction-id': transactionId,
-      'transaction-type': transactionType,
-      category,
-      date,
-      amount,
-      userId,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    };
-    
-    // Add to Firestore
-    await db.collection('transactions').doc(transactionId).set(transaction);
-    
-    return res.status(201).json({ 
-      message: 'Transaction created successfully',
-      transactionId 
-    });
-  } catch (error) {
-    console.error('Error adding transaction:', error);
-    return res.status(500).json({ error: 'Failed to add transaction' });
-  }
-});
-
-// Get all transactions for a user
-app.get('/transactions', authenticateUser, async (req, res) => {
-  const userId = req.user.uid;
-  
-  try {
-    const snapshot = await db.collection('transactions')
-      .where('userId', '==', userId)
-      .orderBy('createdAt', 'desc')
-      .get();
-    
-    const transactions = [];
-    snapshot.forEach(doc => {
-      transactions.push(doc.data());
-    });
-    
-    return res.status(200).json(transactions);
-  } catch (error) {
-    console.error('Error fetching transactions:', error);
-    return res.status(500).json({ error: 'Failed to fetch transactions' });
-  }
-});
-
 // Start the server
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
