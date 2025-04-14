@@ -33,29 +33,6 @@ const firebaseConfig = {
 const firebaseApp = firebase.initializeApp(firebaseConfig);
 const clientAuth = getClientAuth(firebaseApp);
 
-// Get Firestore instance
-const db = getFirestore(firebaseApp);
-
-// Middleware to verify Firebase ID token
-const authenticateUser = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: No token provided' });
-  }
-
-  const idToken = authHeader.split('Bearer ')[1];
-  
-  try {
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-    req.user = decodedToken;
-    next();
-  } catch (error) {
-    console.error('Error verifying auth token:', error);
-    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
-  }
-};
-
 // Authentication routes
 // Sign Up
 app.post('/auth/signup', async (req, res) => {
@@ -113,65 +90,6 @@ app.post('/auth/signout', async (req, res) => {
   } catch (error) {
     console.error('Error signing out:', error);
     return res.status(500).json({ error: 'Error signing out' });
-  }
-});
-
-// Transaction routes
-// Add a new transaction
-app.post('/transactions', authenticateUser, async (req, res) => {
-  const { 'transaction-type': transactionType, category, date, amount } = req.body;
-  const userId = req.user.uid;
-  
-  // Validate required fields
-  if (!transactionType || !category || !date || amount === undefined) {
-    return res.status(400).json({ error: 'All fields are required: transaction-type, category, date, amount' });
-  }
-  
-  try {
-    // Create transaction object
-    const transactionId = uuidv4();
-    const transaction = {
-      'transaction-id': transactionId,
-      'transaction-type': transactionType,
-      category,
-      date,
-      amount,
-      userId,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    };
-    
-    // Add to Firestore
-    await db.collection('transactions').doc(transactionId).set(transaction);
-    
-    return res.status(201).json({ 
-      message: 'Transaction created successfully',
-      transactionId 
-    });
-  } catch (error) {
-    console.error('Error adding transaction:', error);
-    return res.status(500).json({ error: 'Failed to add transaction' });
-  }
-});
-
-// Get all transactions for a user
-app.get('/transactions', authenticateUser, async (req, res) => {
-  const userId = req.user.uid;
-  
-  try {
-    const snapshot = await db.collection('transactions')
-      .where('userId', '==', userId)
-      .orderBy('createdAt', 'desc')
-      .get();
-    
-    const transactions = [];
-    snapshot.forEach(doc => {
-      transactions.push(doc.data());
-    });
-    
-    return res.status(200).json(transactions);
-  } catch (error) {
-    console.error('Error fetching transactions:', error);
-    return res.status(500).json({ error: 'Failed to fetch transactions' });
   }
 });
 
