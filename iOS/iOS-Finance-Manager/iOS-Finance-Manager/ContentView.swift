@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - API Service
 
 struct APIService {
-    static let baseURL = "https://ios-finance-manager.onrender.com"
+    static let baseURL = "https://ios-finance-manager.onrender.com" // Replace with your backend URL
 
     static func login(email: String, password: String) async throws -> AuthResponse {
         guard let url = URL(string: "\(baseURL)/auth/signin") else { throw URLError(.badURL) }
@@ -286,6 +286,7 @@ class AuthViewModel: ObservableObject {
 @MainActor
 class FinanceManager: ObservableObject {
     @Published var transactions: [Transaction] = []
+    @Published var isLoadingTransactions: Bool = false  // New flag
     
     // Compute the current balance.
     var balance: Double {
@@ -293,12 +294,14 @@ class FinanceManager: ObservableObject {
     }
     
     func fetchTransactions(token: String) async {
+        isLoadingTransactions = true
         do {
             let fetched = try await APIService.fetchTransactions(token: token)
             self.transactions = fetched.sorted(by: { $0.date > $1.date })
         } catch {
             print("Error fetching transactions: \(error)")
         }
+        isLoadingTransactions = false
     }
     
     func addTransaction(_ transaction: Transaction, token: String) async {
@@ -337,7 +340,8 @@ class FinanceManager: ObservableObject {
 
 // MARK: - Views
 
-/// The root view which switches between authentication and the main tab view.
+/// The root view switches between AuthenticationView and MainTabView.
+/// The onChange now uses a two-parameter closure and clears the transactions array to prevent lingering data.
 struct ContentView: View {
     @StateObject var authVM = AuthViewModel()
     @StateObject var financeManager = FinanceManager()
@@ -353,8 +357,9 @@ struct ContentView: View {
                     .environmentObject(authVM)
             }
         }
-        .onChange(of: authVM.token) { token in
-            if let token = token {
+        .onChange(of: authVM.token) { old, new in
+            financeManager.transactions = [] // Clear previous data
+            if let token = new {
                 Task { await financeManager.fetchTransactions(token: token) }
             }
         }
@@ -436,7 +441,7 @@ struct MainTabView: View {
     }
 }
 
-/// The dashboard view showing the current balance and recent transactions.
+/// The dashboard view shows the current balance and recent transactions.
 struct DashboardView: View {
     @EnvironmentObject var financeManager: FinanceManager
     @EnvironmentObject var authVM: AuthViewModel
@@ -451,9 +456,17 @@ struct DashboardView: View {
                         Text("Current Balance")
                             .font(.headline)
                             .foregroundColor(.secondary)
-                        Text(formattedBalance)
-                            .font(.system(size: 34, weight: .bold))
-                            .foregroundColor(financeManager.balance >= 0 ? .primary : .red)
+                        if financeManager.isLoadingTransactions {
+                            HStack {
+                                ProgressView()
+                                Text("Loading...")
+                                    .foregroundColor(.secondary)
+                            }
+                        } else {
+                            Text(formattedBalance)
+                                .font(.system(size: 34, weight: .bold))
+                                .foregroundColor(financeManager.balance >= 0 ? .primary : .red)
+                        }
                         Button("Refresh") {
                             if let token = authVM.token {
                                 Task { await financeManager.fetchTransactions(token: token) }
@@ -590,7 +603,7 @@ struct TransactionRowView: View {
     }
 }
 
-/// The transactions view shows the full list with search, filtering, update, and swipe-to-delete.
+/// The transactions view shows the full list with search, filtering, update, and swipe‑to‑delete.
 struct TransactionsView: View {
     @EnvironmentObject var financeManager: FinanceManager
     @EnvironmentObject var authVM: AuthViewModel
@@ -791,7 +804,7 @@ struct AddTransactionView: View {
                         Text("Expense").tag(true)
                     }
                     .pickerStyle(SegmentedPickerStyle())
-                    .onChange(of: isExpense) { newValue in
+                    .onChange(of: isExpense) { _, newValue in
                         if !newValue {
                             selectedCategory = .income
                         } else if selectedCategory == .income {
@@ -857,7 +870,6 @@ struct EditTransactionView: View {
     
     init(transaction: Transaction) {
         self._transaction = State(initialValue: transaction)
-        // Prepopulate fields from the passed transaction.
         self._title = State(initialValue: transaction.title)
         self._amount = State(initialValue: String(format: "%.2f", transaction.amount))
         self._date = State(initialValue: transaction.date)
@@ -878,7 +890,7 @@ struct EditTransactionView: View {
                         Text("Expense").tag(true)
                     }
                     .pickerStyle(SegmentedPickerStyle())
-                    .onChange(of: isExpense) { newValue in
+                    .onChange(of: isExpense) { _, newValue in
                         if !newValue {
                             selectedCategory = .income
                         } else if selectedCategory == .income {
