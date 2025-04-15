@@ -11,6 +11,7 @@ struct DashboardView: View {
     @EnvironmentObject var financeManager: FinanceManager
     @EnvironmentObject var authVM: AuthViewModel
     @State private var showingAddTransactionSheet = false
+    @State private var isExpenseForNewTransaction: Bool = true
     
     var body: some View {
         NavigationView {
@@ -47,7 +48,10 @@ struct DashboardView: View {
                     
                     // Quick Actions
                     HStack {
-                        Button(action: { showingAddTransactionSheet = true }) {
+                        Button(action: {
+                            isExpenseForNewTransaction = false
+                            showingAddTransactionSheet = true
+                        }) {
                             VStack {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.title)
@@ -60,7 +64,10 @@ struct DashboardView: View {
                             .background(Color(.systemBackground))
                             .cornerRadius(12)
                         }
-                        Button(action: { showingAddTransactionSheet = true }) {
+                        Button(action: {
+                            isExpenseForNewTransaction = true
+                            showingAddTransactionSheet = true
+                        }) {
                             VStack {
                                 Image(systemName: "minus.circle.fill")
                                     .font(.title)
@@ -109,7 +116,7 @@ struct DashboardView: View {
             }
             .navigationTitle("Dashboard")
             .sheet(isPresented: $showingAddTransactionSheet) {
-                AddTransactionView(isExpense: true)
+                AddTransactionView(isExpense: isExpenseForNewTransaction)
                     .environmentObject(authVM)
                     .environmentObject(financeManager)
             }
