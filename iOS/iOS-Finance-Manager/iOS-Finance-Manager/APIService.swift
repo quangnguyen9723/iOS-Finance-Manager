@@ -89,7 +89,7 @@ struct APIService {
         guard let url = URL(string: "\(baseURL)/transactions/summary") else { throw URLError(.unknown) }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        // Assuming your summary endpoint requires authorization:
+
         request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, _) = try await URLSession.shared.data(for: request)
         return try JSONDecoder().decode(TransactionSummary.self, from: data)
