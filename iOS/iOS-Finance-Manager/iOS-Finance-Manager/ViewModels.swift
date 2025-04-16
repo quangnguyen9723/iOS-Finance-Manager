@@ -41,13 +41,10 @@ class AuthViewModel: ObservableObject {
     }
     
     func signout() async {
-        guard let token = token else { return }
-
         self.token = nil
         self.user = nil
         self.isLoggedIn = false
         errorMessage = ""
-
     }
 }
 
