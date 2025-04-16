@@ -32,14 +32,6 @@ struct APIService {
         return try JSONDecoder().decode(AuthResponse.self, from: data)
     }
     
-    static func signout(token: String) async throws {
-        guard let url = URL(string: "\(baseURL)/auth/signout") else { throw URLError(.unknown) }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        _ = try await URLSession.shared.data(for: request)
-    }
-    
     static func fetchTransactions(token: String) async throws -> [Transaction] {
         guard let url = URL(string: "\(baseURL)/transactions") else { throw URLError(.unknown) }
         var request = URLRequest(url: url)

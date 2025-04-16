@@ -82,17 +82,6 @@ app.post('/auth/signin', async (req, res) => {
   }
 });
 
-// Sign Out
-app.post('/auth/signout', async (req, res) => {
-  try {
-    await signOut(clientAuth);
-    return res.status(200).json({ message: 'Successfully signed out' });
-  } catch (error) {
-    console.error('Error signing out:', error);
-    return res.status(500).json({ error: 'Error signing out' });
-  }
-});
-
 // Start the server
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {

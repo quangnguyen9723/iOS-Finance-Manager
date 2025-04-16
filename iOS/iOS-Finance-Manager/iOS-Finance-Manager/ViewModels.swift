@@ -42,15 +42,12 @@ class AuthViewModel: ObservableObject {
     
     func signout() async {
         guard let token = token else { return }
-        do {
-            try await APIService.signout(token: token)
-            self.token = nil
-            self.user = nil
-            self.isLoggedIn = false
-            errorMessage = ""
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+
+        self.token = nil
+        self.user = nil
+        self.isLoggedIn = false
+        errorMessage = ""
+
     }
 }
 
