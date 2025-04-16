@@ -2,7 +2,7 @@
 //  ViewModels.swift
 //  iOS-Finance-Manager
 //
-//  Created by Quang Nguyen on 4/14/25.
+//  Created by Quang Nguyen, Aiden Le, Anh Phan on 4/14/25.
 //
 
 import Foundation
@@ -22,8 +22,9 @@ class AuthViewModel: ObservableObject {
             self.token = response.token
             self.user = User(uid: response.uid, email: response.email)
             self.isLoggedIn = true
+            errorMessage = ""
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "email or password is incorrect"
         }
     }
     
@@ -33,8 +34,9 @@ class AuthViewModel: ObservableObject {
             self.token = response.token
             self.user = User(uid: response.uid, email: response.email)
             self.isLoggedIn = true
+            errorMessage = "Some error occurred"
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ""
         }
     }
     
@@ -45,6 +47,7 @@ class AuthViewModel: ObservableObject {
             self.token = nil
             self.user = nil
             self.isLoggedIn = false
+            errorMessage = ""
         } catch {
             errorMessage = error.localizedDescription
         }

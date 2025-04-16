@@ -2,7 +2,7 @@
 //  Models.swift
 //  iOS-Finance-Manager
 //
-//  Created by Quang Nguyen on 4/14/25.
+//  Created by Quang Nguyen, Aiden Le, Anh Phan on 4/14/25.
 //
 
 import Foundation
@@ -68,7 +68,6 @@ struct Transaction: Identifiable, Codable {
         case isExpense = "is_expense"
     }
     
-    // Explicit initializer for creating new transactions.
     init(id: String = UUID().uuidString, title: String, amount: Double, date: Date, category: Category, isExpense: Bool) {
         self.id = id
         self.title = title
@@ -78,7 +77,6 @@ struct Transaction: Identifiable, Codable {
         self.isExpense = isExpense
     }
     
-    // Custom decoding to handle numbers as Double or String, and robust date parsing.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)

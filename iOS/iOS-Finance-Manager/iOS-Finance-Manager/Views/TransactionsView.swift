@@ -2,7 +2,7 @@
 //  TransactionsView.swift
 //  iOS-Finance-Manager
 //
-//  Created by Quang Nguyen on 4/14/25.
+//  Created by Quang Nguyen, Aiden Le, Anh Phan on 4/14/25.
 //
 
 import SwiftUI
@@ -10,9 +10,11 @@ import SwiftUI
 struct TransactionsView: View {
     @EnvironmentObject var financeManager: FinanceManager
     @EnvironmentObject var authVM: AuthViewModel
-    @State private var showingAddTransactionSheet = false
+//    @State private var showingAddTransactionSheet = false
     @State private var selectedFilter: TransactionFilter = .all
     @State private var searchText = ""
+    
+    @State private var transactionType: TransactionType? = nil
     
     enum TransactionFilter: Equatable {
         case all, expenses, income, category(Category)
@@ -57,7 +59,6 @@ struct TransactionsView: View {
     var body: some View {
         NavigationView {
             VStack {
-                // Search Bar
                 HStack {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.secondary)
@@ -75,7 +76,6 @@ struct TransactionsView: View {
                 .cornerRadius(10)
                 .padding(.horizontal)
                 
-                // Filter Chips
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         FilterChip(title: "All", isSelected: selectedFilter == .all, action: { selectedFilter = .all })
@@ -120,13 +120,13 @@ struct TransactionsView: View {
             .navigationTitle("Transactions")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingAddTransactionSheet = true }) {
+                    Button(action: { transactionType = .expense }) {
                         Image(systemName: "plus")
                     }
                 }
             }
-            .sheet(isPresented: $showingAddTransactionSheet) {
-                AddTransactionView(isExpense: true)
+            .sheet(item: $transactionType) { type in
+                AddTransactionView(isExpense: type == .expense)
                     .environmentObject(authVM)
                     .environmentObject(financeManager)
             }

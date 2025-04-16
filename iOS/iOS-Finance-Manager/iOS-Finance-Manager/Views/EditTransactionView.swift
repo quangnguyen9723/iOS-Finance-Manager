@@ -2,7 +2,7 @@
 //  EditTransactionView.swift
 //  iOS-Finance-Manager
 //
-//  Created by Quang Nguyen on 4/14/25.
+//  Created by Quang Nguyen, Aiden Le, Anh Phan on 4/14/25.
 //
 
 import SwiftUI

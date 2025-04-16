@@ -2,22 +2,26 @@
 //  DashboardView.swift
 //  iOS-Finance-Manager
 //
-//  Created by Quang Nguyen on 4/14/25.
+//  Created by Quang Nguyen, Aiden Le, Anh Phan on 4/14/25.
 //
 
 import SwiftUI
 
+enum TransactionType: String, Identifiable {
+    case income, expense
+    var id: String { self.rawValue }
+}
+
 struct DashboardView: View {
     @EnvironmentObject var financeManager: FinanceManager
     @EnvironmentObject var authVM: AuthViewModel
-    @State private var showingAddTransactionSheet = false
-    @State private var isExpenseForNewTransaction: Bool = true
     
+    @State private var transactionType: TransactionType? = nil
+
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
-                    // Balance Card
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Current Balance")
                             .font(.headline)
@@ -46,11 +50,9 @@ struct DashboardView: View {
                     .cornerRadius(12)
                     .shadow(radius: 5)
                     
-                    // Quick Actions
                     HStack {
                         Button(action: {
-                            isExpenseForNewTransaction = false
-                            showingAddTransactionSheet = true
+                            transactionType = .income
                         }) {
                             VStack {
                                 Image(systemName: "plus.circle.fill")
@@ -65,8 +67,7 @@ struct DashboardView: View {
                             .cornerRadius(12)
                         }
                         Button(action: {
-                            isExpenseForNewTransaction = true
-                            showingAddTransactionSheet = true
+                            transactionType = .expense
                         }) {
                             VStack {
                                 Image(systemName: "minus.circle.fill")
@@ -83,7 +84,6 @@ struct DashboardView: View {
                     }
                     .shadow(radius: 5)
                     
-                    // Recent Transactions
                     VStack(alignment: .leading) {
                         HStack {
                             Text("Recent Transactions")
@@ -115,8 +115,8 @@ struct DashboardView: View {
                 .padding()
             }
             .navigationTitle("Dashboard")
-            .sheet(isPresented: $showingAddTransactionSheet) {
-                AddTransactionView(isExpense: isExpenseForNewTransaction)
+            .sheet(item: $transactionType) { type in
+                AddTransactionView(isExpense: type == .expense)
                     .environmentObject(authVM)
                     .environmentObject(financeManager)
             }

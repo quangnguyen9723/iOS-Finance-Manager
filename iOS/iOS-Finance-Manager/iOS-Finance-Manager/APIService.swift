@@ -2,16 +2,16 @@
 //  APIService.swift
 //  iOS-Finance-Manager
 //
-//  Created by Quang Nguyen on 4/14/25.
+//  Created by Quang Nguyen, Aiden Le, Anh Phan on 4/14/25.
 //
 
 import Foundation
 
 struct APIService {
-    static let baseURL = "https://ios-finance-manager.onrender.com" // Replace with your backend URL
+    static let baseURL = "https://ios-finance-manager.onrender.com"
 
     static func login(email: String, password: String) async throws -> AuthResponse {
-        guard let url = URL(string: "\(baseURL)/auth/signin") else { throw URLError(.badURL) }
+        guard let url = URL(string: "\(baseURL)/auth/signin") else { throw URLError(.unknown) }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -22,7 +22,7 @@ struct APIService {
     }
     
     static func signup(email: String, password: String) async throws -> AuthResponse {
-        guard let url = URL(string: "\(baseURL)/auth/signup") else { throw URLError(.badURL) }
+        guard let url = URL(string: "\(baseURL)/auth/signup") else { throw URLError(.unknown) }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -33,7 +33,7 @@ struct APIService {
     }
     
     static func signout(token: String) async throws {
-        guard let url = URL(string: "\(baseURL)/auth/signout") else { throw URLError(.badURL) }
+        guard let url = URL(string: "\(baseURL)/auth/signout") else { throw URLError(.unknown) }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -41,7 +41,7 @@ struct APIService {
     }
     
     static func fetchTransactions(token: String) async throws -> [Transaction] {
-        guard let url = URL(string: "\(baseURL)/transactions") else { throw URLError(.badURL) }
+        guard let url = URL(string: "\(baseURL)/transactions") else { throw URLError(.unknown) }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -52,7 +52,7 @@ struct APIService {
     }
     
     static func addTransaction(transaction: Transaction, token: String) async throws -> String {
-        guard let url = URL(string: "\(baseURL)/transactions") else { throw URLError(.badURL) }
+        guard let url = URL(string: "\(baseURL)/transactions") else { throw URLError(.unknown) }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -69,7 +69,7 @@ struct APIService {
     }
     
     static func updateTransaction(transaction: Transaction, token: String) async throws -> String {
-        guard let url = URL(string: "\(baseURL)/transactions/\(transaction.id)") else { throw URLError(.badURL) }
+        guard let url = URL(string: "\(baseURL)/transactions/\(transaction.id)") else { throw URLError(.unknown) }
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -86,7 +86,7 @@ struct APIService {
     }
     
     static func deleteTransaction(transactionID: String, token: String) async throws {
-        guard let url = URL(string: "\(baseURL)/transactions/\(transactionID)") else { throw URLError(.badURL) }
+        guard let url = URL(string: "\(baseURL)/transactions/\(transactionID)") else { throw URLError(.unknown) }
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -94,7 +94,7 @@ struct APIService {
     }
     
     static func fetchTransactionSummary(token: String) async throws -> TransactionSummary {
-        guard let url = URL(string: "\(baseURL)/transactions/summary") else { throw URLError(.badURL) }
+        guard let url = URL(string: "\(baseURL)/transactions/summary") else { throw URLError(.unknown) }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         // Assuming your summary endpoint requires authorization:

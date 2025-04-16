@@ -2,7 +2,7 @@
 //  Finance_Manager_Widget.swift
 //  Finance-Manager-Widget
 //
-//  Created by Quang Nguyen on 4/14/25.
+//  Created by Quang Nguyen, Aiden Le, Anh Phan on 4/14/25.
 //
 import WidgetKit
 import SwiftUI
@@ -68,6 +68,7 @@ struct FinanceManagerWidgetEntryView : View {
             }
         }
         .padding()
+        .containerBackground(for: .widget, content: { Color.clear })
         .widgetURL(URL(string: "myapp://dashboard"))
     }
 }

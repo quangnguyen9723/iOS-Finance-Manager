@@ -2,7 +2,7 @@
 //  AddTransactionView.swift
 //  iOS-Finance-Manager
 //
-//  Created by Quang Nguyen on 4/14/25.
+//  Created by Quang Nguyen, Aiden Le, Anh Phan on 4/14/25.
 //
 
 import SwiftUI
@@ -18,7 +18,7 @@ struct AddTransactionView: View {
     @State private var selectedCategory: Category
     @State private var isExpense: Bool
     
-    init(isExpense: Bool = true) {
+    init(isExpense: Bool) {
         self._isExpense = State(initialValue: isExpense)
         self._selectedCategory = State(initialValue: isExpense ? .other : .income)
     }

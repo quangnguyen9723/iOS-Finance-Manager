@@ -2,7 +2,7 @@
 //  Finance_Manager_WidgetBundle.swift
 //  Finance-Manager-Widget
 //
-//  Created by Quang Nguyen on 4/14/25.
+//  Created by Quang Nguyen, Aiden Le, Anh Phan on 4/14/25.
 //
 
 import WidgetKit
